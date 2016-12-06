@@ -75,7 +75,7 @@ Meteor.methods({
   updateDocument: (docId, collectionName, updates) => {
     check(docId, String)
     check(collectionName, String)
-    check(updates, Object)
+    check(updates, Array)
 
     if (!Meteor.user()) {
       throw new Meteor.error('not-logged-in', 'You must be logged in to access this function!')
@@ -86,10 +86,6 @@ Meteor.methods({
     }
 
     doc = db[collectionName].findOne({_id: docId})
-
-    if (!doc) {
-      throw new Meteor.error('no-doc-found', `Document with id #{docId} could not be found.`)
-    }
 
     doc.set(updates)
 
@@ -109,44 +105,51 @@ If this is how we want our code to be structured, then we can expect to be writi
 
 1. Check the arguments
 1. Make sure a user is logged in
-!. Make sure user has permission
+1. Make sure user has permission
 1. Make sure a document exists with that id
 1. Make sure the updated document is valid
 
 
 ```javascript
+if (Meteor.isServer) {
+  describe( 'updateDocument function', => {
 
-it('should throw if the first argument is not a string', (done) => {
-  ...
-});
+    it('should throw if the first argument is not a string', (done) => {
+      ...
+    });
 
-it('should throw if the second argument is not a string', (done) => {
-  ...
-});
+    it('should throw if the second argument is not a string', (done) => {
+      ...
+    });
 
-it('should throw if the third argument is not an object', (done) => {
-  ...
-});
+    it('should throw if the third argument is not an object', (done) => {
+      ...
+    });
 
-it('should throw if a user is not logged in', (done) => {
-  ...
-});
+    it('should throw if a user is not logged in', (done) => {
+      ...
+    });
 
-it('should throw if a user does not have permission', (done) => {
-  ...
-});
+    it('should throw if a user does not have permission', (done) => {
+      ...
+    });
 
-it('should throw if no document is found with passed id', (done) => {
-  ...
-})
+    it('should throw if no document is found with passed id', (done) => {
+      ...
+    })
 
-it('should throw if the doc is not valid', (done) => {
-  ...
-})
+    it('should throw if validation was not run', (done) => {
+      ...
+    })
 
-// ... finally on to the success case
+    // ... finally on to the success case
+  })
+
+}
 
 ```
+
+Thats a lot of tests to check the standard function and security of an argument, but super important if you ask me. Here are few utils that you can use to make this process more standardized as well as encourage best practices within your team.
 
 ```javascript
 
@@ -172,10 +175,11 @@ utils.test = {
         .nodeify(done)
     });
   },
+
   checkUserLoggedIn: () => {
     it("throws if the user is not logged in", (done) => {      
       apply(method)
-        .then( => {POS.utils.throwError '.then should not have been called', 'error!'})
+        .then( => { throw new Meteor.error('.then should not have been called', 'error!') })
         .catch((error) => {
           expect(error).to.have.property('errorType').to.equal 'Meteor.Error'
           expect(error).to.have.property('error').to.equal 'not-allowed'
@@ -183,13 +187,12 @@ utils.test = {
         .nodeify(done)
     })
   },
+
   checkPermission: (method, args, setup) => {
     it("throws if the user does not have the correct permissions", (done) => {
       if (setup) { setup() }
       apply(method, args)
-      .then( => {
-        POS.utils.throwError('.then should not have been called', 'error!')
-      })
+      .then( => { throw new Meteor.error('.then should not have been called', 'error!') })
       .catch((error) => {        
         expect(error).to.have.property('errorType').to.equal('Meteor.Error')
         expect(error).to.have.property('error').to.equal('not-allowed')
@@ -197,15 +200,59 @@ utils.test = {
       })
       .nodeify(done)
     })
-  }
+  },
+
+  // we test our validation separately so all we need to do here is ensure that the validate method is called
+  checkValidation: (method, args, collection, setup) => {
+    it("calls the validate function on #{method}", (done) => {      
+      if (setup) { setup() }
+      validate = sinon.spy(collection.prototype, 'validate')
+      apply(method, args)
+        .then( => {
+          wasCalled = validate.called
+          validate.restore()
+          wasCalled.should.equal.true
+          done()          
+        })
+    })
+  },
 }
 ```
 
+Now we can do this:
 
-And if we create a set of utilities to abstract out a bunch of redundant code, then our team is more likely to do things consistently, put all these security checks in place as well as test for them.
+```javascript
+if (Meteor.isServer) {
+  describe( 'updateDocument function', => {
+    // check for error when wrong arg type is passed
+    utils.test.checkArgument('updateDocument', [123], String)
+    utils.test.checkArgument('updateDocument', ['docId123', 123], String)
+    utils.test.checkArgument('updateDocument', ['docId123', 123, []], Object)
+
+    utils.test.checkUserLoggedIn('updateDocument')
+
+    utils.test.checkPermission('updateDocument', ['docId123', 'Posts', {title: 'Test4Life'}])
+
+    utils.test.checkValidation('updateDocument', ['docId123', 'Posts', {title: 'Test4Life'}])
+
+    // ... finally on to the success case
+  })
+
+}
+
+```
+
+Synchronous:
+Wrapping the Meteor.apply call in a resolved Promise makes our tests more consistent because we know they will execute synchronously.
+
+Flexible:
+Another cool feature of these utils is that a couple of them take a setup function as an argument. This is really handy when tackling a special case and you need to stub or spy on a function.
+
+Explicit:
+We try to return as much information back to the developer so that they can get back to fixing the issues after running the tests. You'll notice those catches. They are there incase an error is not thrown, therefore not triggering the catch. In a later tutorial we will refactor to use the chai-as-promised library.
 
 
-
+So if we create a set of utilities to abstract out a bunch of redundant code, then our team is more likely to do things consistently, put all these security checks in place and test for them as well. CRUSH!
 
 
 sandbox, clean up after yourself
