@@ -1,4 +1,4 @@
-### client or server, pick one
+### Testing Meteor: client or server, pick one
 
 Meteor is an isomorphic framework, meaning that the same code can be run on either the server or the client ... or ideally both. When running Meteor in production this allows us to take advantage of one of Meteor's key offerings, the optimistic UI, or eventual consistency with our DB. However, when running tests this isomorphic structure can tangle up our process. Can you guess how?
 
@@ -149,23 +149,30 @@ if (Meteor.isServer) {
 
 ```
 
-Thats a lot of tests to check the standard function and security of an argument, but super important if you ask me. Here are few utils that you can use to make this process more standardized as well as encourage best practices within your team.
+Thats a lot of tests to check the standard function and security of an argument, but super important if you ask me. Here are few utils that you can use to make this process more standardized as well as encourage best practices within your team. These tests assume you are using a couple of great packages built specifically for Meteor:
+  * *check*, used for ensuring arguments are what we expect them to be
+  * Alanning Roles, which provides a robust permission framework to be used with Meteor Accounts.
 
 ```javascript
-
+// a couple helpers that we will use in the utils
+// Promisifying the Meteor.apply makes for better organization and more consistent code
 apply = Promise.denodeify(Meteor.apply)
+// used for creating dynamic it statements (explicit > implicit)
+formatNumber = (num) ->
+  moment(num, 'D').format('Do')
+
 utils = {};
 
 utils.test = {
 
   // turn the meteor call into a Promise to create a more predictable environment and
-  // so that we can easily handle output
+  // so that we can easily handle output. Check out the docs on [Promise.nodeify](https://www.promisejs.org/api/). We use it to call the done function at the end of each test with out having to write out the whole function block, simply cleans up the code a bit.
   promiseCall: () => {
     Promise.nodeify(Meteor.call)
   },
 
   checkArgument: (method, args, type, setup) => {
-    it("expects a #{type} as the #{formatNumber args.length} argument", (done) => {
+    it(`expects a ${type} as the ${formatNumber(args.length)} argument`, (done) => {
       if (setup) { setup() }
       apply(method, args)
         .then( => { throw new Meteor.error('.then should not have been called', 'error!') })
@@ -242,19 +249,15 @@ if (Meteor.isServer) {
 
 ```
 
-Synchronous:
-Wrapping the Meteor.apply call in a resolved Promise makes our tests more consistent because we know they will execute synchronously.
+##### Synchronous:
+Wrapping the Meteor.apply call in a resolved Promise does two things:
+  1. organizes our code into a more readable set of statements
+  1. makes our tests more consistent because we know they will execute synchronously
 
-Flexible:
-Another cool feature of these utils is that a couple of them take a setup function as an argument. This is really handy when tackling a special case and you need to stub or spy on a function.
+##### Flexible:
+Another cool feature of these utils is that a couple of them take a 'setup' function as an argument. This is really handy. For example, when tackling a special case and you need to stub or spy on a function before the test runs. Just define a function which includes any code that you need to be run before the test executes. When stubbing or spying in this 'setup' function, make sure you use a [sinon sandbox](http://sinonjs.org/docs/#sandbox). That way you clan clean it up in a afterEach simply by calling `sandbox.restore()`. Checkout this [great tutorial](https://semaphoreci.com/community/tutorials/best-practices-for-spies-stubs-and-mocks-in-sinon-js).
 
-Explicit:
-We try to return as much information back to the developer so that they can get back to fixing the issues after running the tests. You'll notice those catches. They are there incase an error is not thrown, therefore not triggering the catch. In a later tutorial we will refactor to use the chai-as-promised library.
-
+##### Explicit:
+You'll notice the 'then' blocks that throw an error no matter what. We expect this test to always end up in the catch block because we are testing for an error. Without the then block, this test would fail silently, and actually look like a pass. We try to return as much information back to the developer so that they can get back to fixing the issues after running the tests.  In a later tutorial we will refactor to use the chai-as-promised library.
 
 So if we create a set of utilities to abstract out a bunch of redundant code, then our team is more likely to do things consistently, put all these security checks in place and test for them as well. CRUSH!
-
-
-sandbox, clean up after yourself
-synchronous test runner, no finny business
-chai as promised
