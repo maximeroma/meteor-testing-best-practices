@@ -176,7 +176,7 @@ Here we have established the file that will be called to run our tests. The prom
 
 Lets have a look at the next layer in.
 
-#### imports/test/methods
+*imports/test/methods*
 
 As you can see, we have two sets of methods: user and item. There are basic CRUD (Create Read Update Delete) methods in both item.js and user.js. That means there are 4 methods per file. Lets make a file inside of imports/test/ to test each of these methods like so:
 
@@ -458,7 +458,7 @@ So if we create a set of utilities to abstract out a bunch of redundant code, th
 ### Take aways:
 
 * We defined a file structure that allows clear separation and organization of your code, making it easy for a large team to isolate tests that they are working on. This facilitates rapid iteration and encourages understanding of the test suite.
-* By enforcing synchronicity we have created a stable environment for more reliable results. This pattern also contributes greatly to code readability.
+* By using promises to enforce synchronicity we have created a stable environment for more reliable results. This pattern also contributes greatly to code readability.
 * Using a set of test utils standardizes not only test code but source code as well. We have reduced the number of lines needed to write thorough tests, which always helps a team follow through on high quality coverage.
 
 With these concepts and tools, you should be on your way to a rock solid Meteor testing environment. Thanks for reading.
