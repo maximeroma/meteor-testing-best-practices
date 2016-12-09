@@ -1,3 +1,186 @@
+### Objectives
+
+By the end of this tutorial you will be able to:
+* set up unit tests within your meteor application
+* be able to define a standard testing structure for your team
+* evaluate what is most valuable to test in each method
+* use promises to make a more consistent, repeatable testing environment
+
+
+### Basic Setup for Testing in Meteor
+
+#### File Structure
+
+Here we are going to define a basic structure for your tests to keep things explicit, efficient and scaleable. The keys to this structure will be:
+
+* taking advantage of the *imports* folder and the *test* folder
+* using a test runner file for ease of isolation and synchronicity
+
+In a shift towards making Meteor more inline with Javascipt trends and best practices, Meteor 1.3 introduced lazy loading, which allows developers to only load files/assets that are needed for a specific feature or even as specific as an individual file. This isolation can be leveraged primarily for speed, simplicity, organization, and security. In making this shift, it seems that backward compatibility was a major concern for the Meteor developers, so this lazy loading is _opt in only_. Amazing for all the people with existing Meteor apps that want to take advantage of other great additions that come along in the 1.3 release, native testing being one of them. This opt in approach is achieved through a name spaced directory in the root of the project called *imports*. Anything in this folder will only be loaded when a file explicitly calls for it through an `import` or `require` statement. A *test* directory has also been name spaced and will only load when Meteor is running in a test environment. This is huge bonus for security reason as we can put some destructive methods in there that are essential for quality testing, but could wreak havoc if they fell into the wrong hands in production.  Knowing these thing, lets build a tiered testing structure utilizing these features!
+
+Our structure will look something like this:
+
+root
+  |- client
+  |- imports
+    |- test
+        |- methods
+  |- methods
+    |- user.js
+    |- item.js
+  |- server
+  |- test
+    |- utils
+  |- testRunner.js
+
+
+*methods/user.js*
+```javascript
+
+Meteor.methods({
+  createUser: (...) => {
+    ...
+  },
+
+  getUser: (...) => {
+    ...
+  },
+
+  updateUser: (...) => {
+    ...
+  },
+
+  removeUser: (...) => {
+    ...
+  }
+
+})
+
+```
+*methods/item.js*
+```javascript
+
+Meteor.methods({
+  createItem: (...) => {
+    ...
+  },
+
+  getItem: (...) => {
+    ...
+  },
+
+  updateItem: (...) => {
+    ...
+  },
+
+  removeItem: (...) => {
+    ...
+  }
+
+})
+
+```
+
+#### testRunner.js
+
+Lets breakdown this structure starting from the outside and moving inwards.
+
+``` javascript
+import user from 'imports/test/methods/user.js'
+import item from 'imports/test/methods/item.js'
+
+let testRunner = Promise.resolve();
+
+testRunner
+  .then(=> user.tests())
+  .then(=> item.tests())
+  .catch((err) => console.log('There was an error in the test runner', err))
+```
+
+Here we have established the file that will be called to run our tests. The promises are a convenient way to organize the code and to create an extra enforcement of synchronicity. This structure is a solution to false positives/negative because of race conditions within our testing suite. Another benefit is the ability to isolate a set of test for rapid feedback and iteration in  test driven development.
+
+Lets have a look at the next layer in.
+
+#### imports/test/methods
+
+As you can see, we have two sets of methods: user and item. There are basic CRUD (Create Read Update Delete) methods in both item.js and user.js. That means there are 4 methods per file. Lets make a file inside of imports/test/ to test each of these methods like so:
+
+imports
+  |- test
+    |- user
+      |- user.js
+      |- createUser.js
+      |- getUser.js
+      |- updateUser.js
+      |- removeUser.js
+    |- item
+      |- item.js
+      |- createItem.js
+      |- getItem.js
+      |- updateItem.js
+      |- removeItem.js
+
+
+Whats up with the additional files, _user.js_ and _item.js_? These will be the 'containers' for each set of method tests, much like the testRunner.js is the container for our while test suite. A container in this case is for all of our tests in this folder and will be imported later into our master testRunner file. This accomplishes a super clear structure that allows a developer to go straight to a file when a test fails to see whats going on under the hood. As well when we add a new method test, we simply make a file for it and add it to the container for that directory.
+
+
+*imports/test/user/user.js*
+
+```javascript
+import createUser from './createUser.js'
+import getUser from './getUser.js'
+import updateUser from './updateUser.js'
+import removeUser from './removeUser.js'
+
+let tests = => {
+  if (Meteor.isServer) {
+    describe('user methods', => {
+      describe('createUser', createUser)
+      describe('getUser', getUser)
+      describe('updateUser', updateUser)
+      describe('removeUser', removeUser)
+    })
+  }
+}
+
+export user = {
+  tests
+}
+
+```
+As you can see, we are creating a function called `tests` that we are exporting from this file. The 'tests' function calls each one of our method tests.
+
+*imports/test/user/createUser.js*
+
+```javascript
+createUser = =>
+  describe('throws errors', => {
+    it('throws an error if user is not logged in', (done) => {
+      ...
+    })
+    it('throws an error if ...', (done) => {
+      ...
+    })
+  })
+  describe('success', => {
+    it('successfully creates a new user', (done) => {
+      ...
+    })
+    it('it sets the users information correctly', (done) => {
+      ...
+    })
+  })
+
+export createUser
+```
+
+Here we actually define our `it` statements and test for proper behavior, both errors and success. This pattern allows for a clear read out in the browser view when the tests are run.
+
+@@@@@@@@@
+ADD A PICTURE OF THE TEST RUNNER
+@@@@@@@@@
+
+
 ### Testing Meteor: client or server, pick one
 
 Meteor is an isomorphic framework, meaning that the same code can be run on either the server or the client ... or ideally both. When running Meteor in production this allows us to take advantage of one of Meteor's key offerings, the optimistic UI, or eventual consistency with our DB. However, when running tests this isomorphic structure can tangle up our process. Can you guess how?
