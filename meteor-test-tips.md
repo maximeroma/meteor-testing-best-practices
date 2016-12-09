@@ -156,7 +156,7 @@ Meteor.methods({
 
 ```
 
-#### testRunner.js
+#### A Test Runner
 
 Lets breakdown this structure starting from the outside and moving inwards.
 
@@ -447,7 +447,7 @@ Wrapping the Meteor.apply call in a resolved Promise does two things:
   1. makes our tests more consistent because we know they will execute synchronously
 
 ##### Flexible:
-Another cool feature of these utils is that a couple of them take a 'setup' function as an argument. This is really handy. For example, when tackling a special case and you need to stub or spy on a function before the test runs. Just define a function which includes any code that you need to be run before the test executes. When stubbing or spying in this 'setup' function, make sure you use a [sinon sandbox](http://sinonjs.org/docs/#sandbox). That way you clan clean it up in a afterEach simply by calling `sandbox.restore()`. Checkout this [great tutorial](https://semaphoreci.com/community/tutorials/best-practices-for-spies-stubs-and-mocks-in-sinon-js).
+Another cool feature of these utils is that a couple of them take a 'setup' function as an argument. This is really handy. For example, when tackling a special case and you need to stub or spy on a function before the test runs. Just define a function which includes any code that you need to be run before the test executes. When stubbing or spying in this 'setup' function, make sure you use a [sinon sandbox](http://sinonjs.org/docs/#sandbox). That way you can clean it up in a afterEach simply by calling `sandbox.restore()`. Checkout this [great tutorial](https://semaphoreci.com/community/tutorials/best-practices-for-spies-stubs-and-mocks-in-sinon-js).
 
 ##### Explicit:
 You'll notice the 'then' blocks that throw an error no matter what. We expect this test to always end up in the catch block because we are testing for an error. Without the then block, this test would fail silently, and actually look like a pass. We try to return as much information back to the developer so that they can get back to fixing the issues after running the tests.  In a later tutorial we will refactor to use the chai-as-promised library.
