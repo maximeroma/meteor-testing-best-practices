@@ -1,24 +1,99 @@
-### Objectives
+## Unit Testing in Meteor 1.3+
+
+The key to successful application testing is *reliability* and in my experience, the larger an application grows, the less reliable a test suite becomes. There can be several reasons for this:
+
+1. race conditions - interference within test suite
+1. cascading failure - when one test fails everything after it fails
+1. non standard source code - the same result is achieved many different ways in the application
+1. non standard test code - code becomes too complex as many developers write more tests
+
+#### Objectives
 
 By the end of this tutorial you will be able to:
-* set up unit tests within your meteor application
-* be able to define a standard testing structure for your team
-* evaluate what is most valuable to test in each method
+* set up unit tests geared toward a large project within your Meteor application
+* be able to define a standard testing structure for your team that also enforces standards in your source code
 * use promises to make a more consistent, repeatable testing environment
 
 
-### Basic Setup for Testing in Meteor
+### Testing Meteor: client or server, pick one
 
-#### File Structure
+Meteor is an isomorphic framework, meaning that the same code can be run on either the server or the client ... or ideally both. When running Meteor in production this allows us to take advantage of one of Meteor's key offerings, the optimistic UI, or eventual consistency with our DB. However, when running tests this isomorphic structure can tangle up our process. Can you guess how?
 
-Here we are going to define a basic structure for your tests to keep things explicit, efficient and scaleable. The keys to this structure will be:
+Consider the following code:
+
+```javascript
+
+Meteor.methods({
+  isLoggedIn: => {
+    return Meteor.user() ? true : false;
+  }
+})
+
+```
+
+The test:
+
+```javascript
+describe( 'the isLoggedIn function', => {
+  it('should return false if a user is NOT logged in', (done) => {
+    expect(Meteor.call('isLoggedIn')).to.be.false;
+    done()
+  })
+  it('should return true if a user is logged in', (done) => {
+    sinon.stub(Meteor, 'user', => true)
+    expect(Meteor.call('isLoggedIn')).to.be.true;
+    Meteor.user.retore()
+    done()
+  })
+})
+
+```
+
+Very straight forward. So why does it behave as expected sometimes and not others? Whats more, there seems to be a pattern, every other time the tests pass on the client, then on the server...infuriating if you have ever been here.
+
+Gotcha! The STUBS! They are being stubbed and then restored on both the client and the server ... _simultaneously_ .
+
+The solution is to run your method tests only on the server. This is sufficient as the server is your source of truth. If the tests pass on the server, then we know the client is either in sync or will be shortly after Meteor's optimistic UI magic has done its work.
+
+```javascript
+if (Meteor.isServer) {
+
+  describe( 'the isLoggedIn function', => {
+    it('should return false if a user is NOT logged in', (done) => {
+      expect(Meteor.call('isLoggedIn')).to.be.false;
+      done()
+    })
+    it('should return true if a user is logged in', (done) => {
+      sinon.stub(Meteor, 'user', => true)
+      expect(Meteor.call('isLoggedIn')).to.be.true;
+      Meteor.user.retore()
+      done()
+    })
+  })
+
+}
+
+```
+
+Consistency is the name of the game in reliable unit tests.
+
+So then what unit tests would you run on the client? Anything that is not looking at the database can/should be run on the client such as a UI helper, or processing user input.
+
+
+### Advanced Structure for Testing in Meteor
+
+Here we are going to define an advanced structure for your tests to keep things explicit, efficient and scaleable. The keys to this structure will be:
 
 * taking advantage of the *imports* folder and the *test* folder
 * using a test runner file for ease of isolation and synchronicity
 
-In a shift towards making Meteor more inline with Javascipt trends and best practices, Meteor 1.3 introduced lazy loading, which allows developers to only load files/assets that are needed for a specific feature or even as specific as an individual file. This isolation can be leveraged primarily for speed, simplicity, organization, and security. In making this shift, it seems that backward compatibility was a major concern for the Meteor developers, so this lazy loading is _opt in only_. Amazing for all the people with existing Meteor apps that want to take advantage of other great additions that come along in the 1.3 release, native testing being one of them. This opt in approach is achieved through a name spaced directory in the root of the project called *imports*. Anything in this folder will only be loaded when a file explicitly calls for it through an `import` or `require` statement. A *test* directory has also been name spaced and will only load when Meteor is running in a test environment. This is huge bonus for security reason as we can put some destructive methods in there that are essential for quality testing, but could wreak havoc if they fell into the wrong hands in production.  Knowing these thing, lets build a tiered testing structure utilizing these features!
+In a shift towards making Meteor more inline with Javascipt trends and best practices, Meteor 1.3 introduced lazy loading, which allows developers to only load files/assets that are needed for a specific feature. This isolation can be leveraged primarily for speed, simplicity, organization, and security. In making this shift, it seems that backward compatibility was a major concern for the Meteor Core developers, so this lazy loading is _opt in only_. Amazing for all the people with existing Meteor apps that want to take advantage of other great additions that come along in the 1.3 release, native testing being one of them. This opt in approach is achieved through a name spaced directory in the root of the project called *imports*. Anything in this folder will only be loaded when a file explicitly calls for it through an `import` or `require` statement.
 
-Our structure will look something like this:
+> We won't visit it in this tutorial but it is worth mentioning that a *test* directory has also been name spaced and will only load when Meteor is running in a test environment. This is huge bonus for security reason as we can put some destructive methods in there that are essential for quality testing, but could wreak havoc if they fell into the wrong hands in production.
+
+Using the *imports* directory, lets build a tiered testing structure!
+
+Our app structure will look something like this:
 
 root
   |- client
@@ -121,7 +196,7 @@ imports
       |- removeItem.js
 
 
-Whats up with the additional files, _user.js_ and _item.js_? These will be the 'containers' for each set of method tests, much like the testRunner.js is the container for our while test suite. A container in this case is for all of our tests in this folder and will be imported later into our master testRunner file. This accomplishes a super clear structure that allows a developer to go straight to a file when a test fails to see whats going on under the hood. As well when we add a new method test, we simply make a file for it and add it to the container for that directory.
+Whats up with the additional files, _user.js_ and _item.js_? These will be the 'containers' for each set of method tests, much like the testRunner.js is the container for our whole test suite. A container in this case groups all of our tests in this directory and will be imported later into our master testRunner file. This accomplishes a super clear structure that allows a developer to go straight to a file when a test fails to see whats going on under the hood. As well when we add a new method test, we simply make a file for it and add it to the container for that directory.
 
 
 *imports/test/user/user.js*
@@ -174,80 +249,12 @@ createUser = =>
 export createUser
 ```
 
-Here we actually define our `it` statements and test for proper behavior, both errors and success. This pattern allows for a clear read out in the browser view when the tests are run.
-
-@@@@@@@@@
-ADD A PICTURE OF THE TEST RUNNER
-@@@@@@@@@
+Here we actually define our `it` statements and testing for proper behavior, both failure and success. This pattern allows for a clear read out in the browser view when the tests are run.
 
 
-### Testing Meteor: client or server, pick one
+### Test Utils and Promises
 
-Meteor is an isomorphic framework, meaning that the same code can be run on either the server or the client ... or ideally both. When running Meteor in production this allows us to take advantage of one of Meteor's key offerings, the optimistic UI, or eventual consistency with our DB. However, when running tests this isomorphic structure can tangle up our process. Can you guess how?
-
-Consider the following code:
-
-```javascript
-
-Meteor.methods({
-  isLoggedIn: => {
-    return Meteor.user() ? true : false;
-  }
-})
-
-```
-
-The test:
-
-```javascript
-describe( 'the isLoggedIn function', => {
-  it('should return false if a user is NOT logged in', (done) => {
-    expect(Meteor.call('isLoggedIn')).to.be.false;
-    done()
-  })
-  it('should return true if a user is logged in', (done) => {
-    sinon.stub(Meteor, 'user', => true)
-    expect(Meteor.call('isLoggedIn')).to.be.true;
-    Meteor.user.retore()
-    done()
-  })
-})
-
-```
-
-Very straight forward. So why does it behave as expected sometimes and not others? Whats more, there seems to be a pattern, every other time the tests pass on the client, then on the server...infuriating if you have ever been here.
-
-Gotcha! The STUBS! They are being stubbed and then restored on both the client and the server ... _simultaneously_ .
-
-The solution is to run your method tests only on the server. This is sufficient as the server is your source of truth. If the tests pass on the server, then we know the client is either in sync or will be shortly after Meteor's optimistic UI magic has done its work.
-
-```javascript
-if (Meteor.isServer) {
-
-  describe( 'the isLoggedIn function', => {
-    it('should return false if a user is NOT logged in', (done) => {
-      expect(Meteor.call('isLoggedIn')).to.be.false;
-      done()
-    })
-    it('should return true if a user is logged in', (done) => {
-      sinon.stub(Meteor, 'user', => true)
-      expect(Meteor.call('isLoggedIn')).to.be.true;
-      Meteor.user.retore()
-      done()
-    })
-  })
-
-}
-
-```
-
-Consistency is the name of the game in reliable unit tests.
-
-So then what unit tests would you run on the client? Anything that is not looking at the database can/should be run on the client such as a UI helper, or processing user input.
-
-### Test Utils help you standardize code
-
-Creating a set of test utilities gives structure to your code before you even write it!
+Creating a set of test utilities gives structure to your code before you even write it! As well, using promises as the default for testing our Meteor methods makes the code explicitly synchronous and easy to read/refactor.
 
 Consider this code:
 
@@ -335,6 +342,8 @@ if (Meteor.isServer) {
 Thats a lot of tests to check the standard function and security of an argument, but super important if you ask me. Here are few utils that you can use to make this process more standardized as well as encourage best practices within your team. These tests assume you are using a couple of great packages built specifically for Meteor:
   * *check*, used for ensuring arguments are what we expect them to be
   * Alanning Roles, which provides a robust permission framework to be used with Meteor Accounts.
+
+No sweat if you aren't using these packages, the concepts are still 100% applicable to your application.
 
 ```javascript
 // a couple helpers that we will use in the utils
@@ -443,4 +452,13 @@ Another cool feature of these utils is that a couple of them take a 'setup' func
 ##### Explicit:
 You'll notice the 'then' blocks that throw an error no matter what. We expect this test to always end up in the catch block because we are testing for an error. Without the then block, this test would fail silently, and actually look like a pass. We try to return as much information back to the developer so that they can get back to fixing the issues after running the tests.  In a later tutorial we will refactor to use the chai-as-promised library.
 
-So if we create a set of utilities to abstract out a bunch of redundant code, then our team is more likely to do things consistently, put all these security checks in place and test for them as well. CRUSH!
+So if we create a set of utilities to abstract out a bunch of redundant code, then our team is more likely to do things consistently, put all the security checks in place and test for them as well. CRUSH!
+
+
+### Take aways:
+
+* We defined a file structure that allows clear separation and organization of your code, making it easy for a large team to isolate tests that they are working on. This facilitates rapid iteration and encourages understanding of the test suite.
+* By enforcing synchronicity we have created a stable environment for more reliable results. This pattern also contributes greatly to code readability.
+* Using a set of test utils standardizes not only test code but source code as well. We have reduced the number of lines needed to write thorough tests, which always helps a team follow through on high quality coverage.
+
+With these concepts and tools, you should be on your way to a rock solid Meteor testing environment. Thanks for reading.
